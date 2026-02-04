@@ -17,7 +17,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1_5_1"
+const version = "1.0.0"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
