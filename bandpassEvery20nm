@@ -1,0 +1,31 @@
+ // The sensor for this table is Sony IMX174 (monochrome)
+ // It's used in the QHY174 GPS camera
+
+ // Format of the table is (an array of arrays) of the form:
+ // [
+ //   [wavelength_nm,  qe_percent],
+ //   [wavelength_nm,  qe_percent],
+ //   [wavelength_nm,  qe_percent],
+ //   ...
+ //   [wavelength_nm,  qe_percent],
+ // ]
+
+ // Note that wavelengths must be in ascending order.
+ // qe_percent is just used as a weighting factor, and wavelength weights will ultimately be
+ // normalized so that the sum of the weights is 1.0. As a result, QE percentage is not the
+ // mandatory units to use: if you have other values that can be used to weight each
+ // wavelength contribution, go ahead.
+
+ [
+    [      400.0,      100   ],
+    [      420.0,      100   ],
+    [      440.0,      100   ],
+    [      460.0,      100   ],
+    [      480.0,      100   ],
+    [      500.0,      100   ],
+    [      520.0,      100   ],
+    [      540.0,      100   ],
+    [      560.0,      100   ],
+    [      580.0,      100   ],
+    [      600.0,      100   ],
+  ]
