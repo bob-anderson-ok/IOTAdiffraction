@@ -19,7 +19,7 @@ import (
 //   - pathOffsetFromCenterKm: Perpendicular offset from the center (km)
 //   - fundamentalPlaneWidthKm: Width of the fundamental plane in km
 //   - fundamentalPlaneWidthPts: Width of the fundamental plane in pixels
-//   - intensityImagePath: Path to the 16-bit diffraction image (e.g., "occultImage16bit.png")
+//   - intensityImagePath: Path to the 16-bit diffraction image (e.g., "targetImage16bit.png")
 //   - geometricImagePath: Path to the geometric shadow image (e.g., "geometricShadow.png")
 func ExtractAndPlotLightCurve(
 	dxKmPerSec float64,
@@ -96,12 +96,12 @@ func ExtractAndPlotLightCurve(
 func Example() {
 	// These parameters would typically come from your occultation event parameter file
 	lightCurveData, edges, err := ExtractAndPlotLightCurve(
-		-15.0,                  // dxKmPerSec: Shadow velocity X component
-		-10.0,                  // dyKmPerSec: Shadow velocity Y component
-		20.0,                   // pathOffsetFromCenterKm: Perpendicular offset from the center
-		500.0,                  // fundamentalPlaneWidthKm: Width of fundamental plane in km
-		1000,                   // fundamentalPlaneWidthPts: Width of fundamental plane in pixels
-		"occultImage16bit.png", // Path to the 16-bit diffraction image
+		5.074,                  // dxKmPerSec: Shadow velocity X component
+		-0.904,                 // dyKmPerSec: Shadow velocity Y component
+		-1.18,                  // pathOffsetFromCenterKm: Perpendicular offset from the center
+		40.0,                   // fundamentalPlaneWidthKm: Width of fundamental plane in km
+		2000,                   // fundamentalPlaneWidthPts: Width of fundamental plane in pixels
+		"targetImage16bit.png", // Path to the 16-bit diffraction image
 		"geometricShadow.png",  // Path to geometric shadow image
 	)
 

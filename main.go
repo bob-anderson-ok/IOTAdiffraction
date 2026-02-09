@@ -17,7 +17,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.2"
+const version = "1.0.3"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -400,9 +400,9 @@ func main() {
 			os.Exit(13)
 		}
 
-		err = SaveGray16PNG("occultImage16bit.png", occultImage)
+		err = SaveGray16PNG("targetImage16bit.png", occultImage)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "occultImage16bit.png", err))
+			fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
 			os.Exit(14)
 		}
 	} else {
@@ -426,9 +426,9 @@ func main() {
 			os.Exit(13)
 		}
 
-		err = SaveGray16PNG("occultImage16bit.png", occultImage)
+		err = SaveGray16PNG("targetImage16bit.png", occultImage)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "occultImage16bit.png", err))
+			fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
 			os.Exit(14)
 		}
 	}
@@ -467,9 +467,9 @@ func main() {
 	//		os.Exit(13)
 	//	}
 	//
-	//	err = SaveGray16PNG("occultImage16bit.png", occultImage)
+	//	err = SaveGray16PNG("targetImage16bit.png", occultImage)
 	//	if err != nil {
-	//		fmt.Println(fmt.Errorf("writing of %q failed: %w", "occultImage16bit.png", err))
+	//		fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
 	//		os.Exit(14)
 	//	}
 	//}
