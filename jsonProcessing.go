@@ -92,6 +92,15 @@ func validateJsonFileAndFillEvent(jsonTable map[string]interface{}, event *Occul
 		mainBodyRequired = false
 	}
 
+	extWidth, ok := getLeafValue(jsonTable, "external_image_width_km")
+	if ok {
+		event.ExternalImageWidthKm, ok = extWidth.(float64)
+		if !ok {
+			msg = "external_image_width_km: is not a float64"
+			return msg, false
+		}
+	}
+
 	title, ok := getLeafValue(jsonTable, "title")
 	if ok {
 		event.Title, ok = title.(string)

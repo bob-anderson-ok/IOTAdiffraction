@@ -76,11 +76,16 @@
 
   // Set path_to_external_image. This field should be omitted if no external image is supplied.
   // External images must be square and the width is used as fundamental_plane_width_num_points
-  // and overrides any value supplied later for that parameter. Any ellipses defined will be
-  // added on top of the external image. The expectation is that the image being supplied
-  // is a polygon shape. The file format is 8 bit grayscale png with object pixels set to 0
-  // and all background pixels set to 255 (actually, any non-zero value will work).
+  // and overrides any value supplied in that parameter. Any ellipses defined will be
+  // added on top of the external image. Most commonly the ellipses are left empty.
+  // The external image file format can be 8 bit grayscale png with
+  // asteroid pixels set to 0 and all background pixels set to 255. If the external image
+  // is an RGB type, it is converted to the gray 8 and the external image pixel at (0,0)
+  // is read and used as skyRef. This is used to set the gray 8 image to 0 everywhere
+  // this value is found in the external image and to 255 everywhere else. The scheme is
+  // simply if it's not 'sky', it is 'asteroid'.
 
-  // path_to_external_image : "input.png",
+  path_to_external_image : "11293_2.png",
+  external_image_width_km : 21.8
 
 }

@@ -17,7 +17,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.3"
+const version = "1.0.5"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -33,6 +33,7 @@ type OccultationEvent struct {
 	WindowSizePixels                int
 	PathForGroundShadowOutputFolder string
 	PathToExternalImage             string
+	ExternalImageWidthKm            float64
 	PathToQEtable                   string
 	QEtable                         [][2]float64
 	Title                           string
@@ -190,21 +191,42 @@ func main() {
 			os.Exit(7)
 		}
 
-		// We require that an external image is supplied in GRAY format (uint8) to match
+		// We require that an external image is in GRAY format (uint8) to match
 		// our internal use when we build the fundamental plane image ourselves. We do this
 		// so that we can add (overlay) any ellipses defined in the json file. We expect
 		// that external image files are used only to define odd or polygon shapes.
-		if img.ColorModel() != color.GrayModel {
-			fmt.Println(fmt.Errorf("\n\tThe supplied external image %q is not type GRAY.", event.PathToExternalImage))
+		// If the image is RGB (32-bit), we convert it to Gray automatically.
+		var grayImg *image.Gray
+		if img.ColorModel() == color.GrayModel {
+			grayImg = img.(*image.Gray)
+		} else if img.ColorModel() == color.RGBAModel || img.ColorModel() == color.NRGBAModel {
+			fmt.Printf("\n\tThe supplied external image %q is %s. Converting to Gray.\n",
+				event.PathToExternalImage, ColorModelString(img.ColorModel()))
+			bounds := img.Bounds()
+			grayImg = image.NewGray(bounds)
+			skyRef := img.At(bounds.Min.X, bounds.Min.Y)
+			for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+				for x := bounds.Min.X; x < bounds.Max.X; x++ {
+					if img.At(x, y) == skyRef {
+						grayImg.SetGray(x, y, color.Gray{Y: 255})
+					} else {
+						grayImg.SetGray(x, y, color.Gray{Y: 0})
+					}
+				}
+			}
+		} else {
+			fmt.Println(fmt.Errorf("\n\tThe supplied external image %q is not type GRAY (found: %s).",
+				event.PathToExternalImage, ColorModelString(img.ColorModel())))
 			os.Exit(8)
 		}
 
-		event.FplaneImage = img.(*image.Gray)
+		event.FplaneImage = grayImg
 
 		// Override the value (possibly) supplied in the fundamental_plane_width_num_points parameter
 		event.FundamentalPlaneWidthPoints = img.Bounds().Dx()
 		Npts = event.FundamentalPlaneWidthPoints // Shorthand
-		fmt.Println(ColorModelString(img.ColorModel()))
+		fmt.Printf("External image loaded. Color model in use: %s\n", ColorModelString(event.FplaneImage.ColorModel()))
+		fmt.Printf("external_image_width_km: %g\n", event.ExternalImageWidthKm)
 	} else { // No image supplied by user, so we start our own.
 		event.FplaneImage = image.NewGray(image.Rect(0, 0, Npts, Npts))
 		FillFplane(event.FplaneImage, true)

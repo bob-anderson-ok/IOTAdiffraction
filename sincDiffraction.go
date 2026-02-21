@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"math/cmplx"
 )
@@ -109,10 +110,21 @@ func FullObservationPlaneSincSolution(LKm, ZKm, WavelengthKm float64, sourcePlan
 	alpha := complex(1.0, 0.0)
 	beta := complex(0.0, 0.0)
 
-	// Compute wgts @ sourcePlane @ wgts
-	Zgemm3m(Rowmajor, Notrans, Notrans, N, M, K, alpha, A, lda, B, ldb, beta, C, ldc)
-	Zgemm3m(Rowmajor, Notrans, Notrans, N, M, K, alpha, C, lda, A, ldb, beta, ans, ldc)
-	// Zgemm3m computes C <- alpha * A @ B + beta * C (which for us is C <- A @ B)
+	if Npts >= 1000 {
+		// Compute wgts @ sourcePlane @ wgts
+		Zgemm3m(Rowmajor, Notrans, Notrans, N, M, K, alpha, A, lda, B, ldb, beta, C, ldc)
+		Zgemm3m(Rowmajor, Notrans, Notrans, N, M, K, alpha, C, lda, A, ldb, beta, ans, ldc)
+		// Zgemm3m computes C <- alpha * A @ B + beta * C (which for us is C <- A @ B)
+	} else {
+		C, err = MatMulSquareComplex(A, B, Npts)
+		if err != nil {
+			fmt.Println(fmt.Errorf(err.Error()))
+		}
+		ans, err = MatMulSquareComplex(C, A, Npts)
+		if err != nil {
+			fmt.Println(fmt.Errorf(err.Error()))
+		}
+	}
 
 	return ans
 }
