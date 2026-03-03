@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"math"
 	"math/rand"
@@ -17,7 +19,7 @@ func interpolate(matrix [][]float64, x, y float64) float64 {
 		return 0
 	}
 
-	// Clamp to valid range (that is, at edges of matrix
+	// Clamp to valid range (that is, at the edges of matrix
 	if x < 0 {
 		x = 0
 	}
@@ -331,6 +333,96 @@ func Flatten2D(m [][]complex128) ([]complex128, error) {
 //	}
 //	return m, nil
 //}
+
+// DrawPathOnImage draws the observation path on a grayscale image and returns a new RGBA image.
+// The path line is drawn in red from (x1,y1) to (x2,y2).
+// A red dot is drawn at the start point and a green dot at the end point.
+func DrawPathOnImage(gray *image.Gray, x1, y1, x2, y2 float64,
+	startX, startY, endX, endY float64) *image.RGBA {
+	bounds := gray.Bounds()
+	result := image.NewRGBA(bounds)
+	draw.Draw(result, bounds, gray, bounds.Min, draw.Src)
+
+	// Draw the line in red
+	drawLineOnImage(result, x1, y1, x2, y2, color.RGBA{R: 255, A: 255})
+
+	// Draw the start dot (red)
+	drawDotOnImage(result, startX, startY, 5, color.RGBA{R: 255, A: 255})
+
+	// Draw the end dot (green)
+	drawDotOnImage(result, endX, endY, 5, color.RGBA{G: 255, A: 255})
+
+	return result
+}
+
+// drawLineOnImage draws a line using Bresenham's algorithm with 3-pixel width.
+func drawLineOnImage(img *image.RGBA, x1, y1, x2, y2 float64, col color.Color) {
+	dx := math.Abs(x2 - x1)
+	dy := math.Abs(y2 - y1)
+	sx := -1.0
+	if x1 < x2 {
+		sx = 1.0
+	}
+	sy := -1.0
+	if y1 < y2 {
+		sy = 1.0
+	}
+	err := dx - dy
+
+	for {
+		for oy := -1; oy <= 1; oy++ {
+			for ox := -1; ox <= 1; ox++ {
+				px := int(x1) + ox
+				py := int(y1) + oy
+				if px >= 0 && px < img.Bounds().Dx() && py >= 0 && py < img.Bounds().Dy() {
+					img.Set(px, py, col)
+				}
+			}
+		}
+
+		if math.Abs(x1-x2) < 1 && math.Abs(y1-y2) < 1 {
+			break
+		}
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x1 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y1 += sy
+		}
+	}
+}
+
+// drawDotOnImage draws a filled circle on the image.
+func drawDotOnImage(img *image.RGBA, cx, cy float64, radius int, col color.Color) {
+	for y := -radius; y <= radius; y++ {
+		for x := -radius; x <= radius; x++ {
+			if x*x+y*y <= radius*radius {
+				px := int(cx) + x
+				py := int(cy) + y
+				if px >= 0 && px < img.Bounds().Dx() && py >= 0 && py < img.Bounds().Dy() {
+					img.Set(px, py, col)
+				}
+			}
+		}
+	}
+}
+
+// SaveImagePNG saves any image.Image to a PNG file.
+func SaveImagePNG(filename string, img image.Image) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	return png.Encode(f, img)
+}
 
 func Reshape1DTo2D(v []float64, rows, cols int) ([][]float64, error) {
 	if len(v) != rows*cols {

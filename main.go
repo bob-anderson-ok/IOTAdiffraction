@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.7"
+const version = "1.0.8"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -396,6 +396,7 @@ func main() {
 	fmt.Printf("Calculation of the observation intensity took %s\n", elapsed)
 
 	var newImage [][]float64
+	var imgForDisplay *image.Gray
 
 	if event.StarDiamKm > 0.0 {
 		fmt.Printf("\nStar diameter projected at the plane of the asteroid is %0.3f km\n\n", event.StarDiamKm)
@@ -413,7 +414,7 @@ func main() {
 		elapsed := time.Since(start)
 		fmt.Printf("Convolution of intensity matrix with star image took %s\n", elapsed)
 
-		imgForDisplay, err := MatrixToGrayViewPercentile(newImage, 0.0, 100)
+		imgForDisplay, err = MatrixToGrayViewPercentile(newImage, 0.0, 100)
 		// comment place here just to suppress dup lines warning
 		if err != nil {
 			fmt.Println(fmt.Errorf("creation of the display image failed: %w", err))
@@ -440,7 +441,7 @@ func main() {
 		}
 	} else {
 		// Make a user-friendly .png of the observation intensity matrix
-		imgForDisplay, err := MatrixToGrayViewPercentile(event.IntensityMatrix, 0.0, 100)
+		imgForDisplay, err = MatrixToGrayViewPercentile(event.IntensityMatrix, 0.0, 100)
 		if err != nil {
 			fmt.Println(fmt.Errorf("creation of the display image failed: %w", err))
 			os.Exit(11)
@@ -463,6 +464,18 @@ func main() {
 		if err != nil {
 			fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
 			os.Exit(14)
+		}
+	}
+
+	// Save a diffraction image with an observation path overlay
+	if event.ShadowSpeedKmPerSec > 0.0 && imgForDisplay != nil {
+		annotated := DrawPathOnImage(imgForDisplay, p1.X, p1.Y, p2.X, p2.Y,
+			event.PathStart[0], event.PathStart[1], event.PathEnd[0], event.PathEnd[1])
+		err = SaveImagePNG("diffractionImageWithPath.png", annotated)
+		if err != nil {
+			fmt.Println(fmt.Errorf("writing of %q failed: %w", "diffractionImageWithPath.png", err))
+		} else {
+			fmt.Println("Diffraction image with observation path saved to diffractionImageWithPath.png")
 		}
 	}
 
