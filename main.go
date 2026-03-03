@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.6"
+const version = "1.0.7"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -510,7 +510,35 @@ func main() {
 	elapsed = time.Since(programStart)
 	fmt.Printf("\nTotal program run time is %s\n", elapsed)
 
-	if showPlots && event.WindowSizePixels > 0 { // We have lots of displays to make!
+	if !showPlots {
+		// Save plots as PNG files instead of displaying them
+		if event.ShadowSpeedKmPerSec > 0.0 {
+			edges := FindEdgesInGeometricShadow(event)
+			plotImg, err := makePlotImage(event.PathDirection, 1200, 500, event, edges)
+			if err != nil {
+				fmt.Println(fmt.Errorf("creating light curve plot failed: %w", err))
+				os.Exit(15)
+			}
+			f, err := os.Create("lightCurvePlot.png")
+			if err != nil {
+				fmt.Println(fmt.Errorf("creating lightCurvePlot.png failed: %w", err))
+				os.Exit(16)
+			}
+			if err := png.Encode(f, plotImg); err != nil {
+				if cerr := f.Close(); cerr != nil {
+					fmt.Println(fmt.Errorf("closing lightCurvePlot.png failed: %w", cerr))
+				}
+				fmt.Println(fmt.Errorf("writing lightCurvePlot.png failed: %w", err))
+				os.Exit(17)
+			}
+			if err := f.Close(); err != nil {
+				fmt.Println(fmt.Errorf("closing lightCurvePlot.png failed: %w", err))
+				os.Exit(18)
+			}
+			fmt.Println("Light curve plot saved to lightCurvePlot.png")
+		}
+		// diffractionImage8bit.png and camera_response.png are already saved
+	} else if event.WindowSizePixels > 0 { // We have lots of displays to make!
 		size := event.WindowSizePixels
 
 		winTitle := event.Title
