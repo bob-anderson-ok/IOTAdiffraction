@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -17,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.5"
+const version = "1.0.6"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -81,12 +82,22 @@ func main() {
 
 	args := os.Args
 
-	if len(args) != 2 {
-		fmt.Println("\n\tWrong number of arguments.\n\tUsage: OccultDiffractionApp <parameter-file>")
+	if len(args) < 2 || len(args) > 3 {
+		fmt.Println("\n\tWrong number of arguments.\n\tUsage: OccultDiffractionApp <parameter-file> [true|false]")
 		os.Exit(1)
 	}
 
 	path := args[1]
+
+	showPlots := true
+	if len(args) == 3 {
+		var err error
+		showPlots, err = strconv.ParseBool(args[2])
+		if err != nil {
+			fmt.Println("\n\tSecond argument must be true or false.")
+			os.Exit(1)
+		}
+	}
 
 	// Read the Json5 (or Json) parameter file
 	data, err := os.ReadFile(path)
@@ -499,7 +510,7 @@ func main() {
 	elapsed = time.Since(programStart)
 	fmt.Printf("\nTotal program run time is %s\n", elapsed)
 
-	if event.WindowSizePixels > 0 { // We have lots of displays to make!
+	if showPlots && event.WindowSizePixels > 0 { // We have lots of displays to make!
 		size := event.WindowSizePixels
 
 		winTitle := event.Title
