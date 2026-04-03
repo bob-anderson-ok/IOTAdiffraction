@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.8"
+const version = "1.0.9"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -204,7 +204,7 @@ func main() {
 
 		// We require that an external image is in GRAY format (uint8) to match
 		// our internal use when we build the fundamental plane image ourselves. We do this
-		// so that we can add (overlay) any ellipses defined in the json file. We expect
+		// so that we can add (overlay) any ellipses defined in the JSON file. We expect
 		// that external image files are used only to define odd or polygon shapes.
 		// If the image is RGB (32-bit), we convert it to Gray automatically.
 		var grayImg *image.Gray
@@ -315,10 +315,7 @@ func main() {
 
 	event.ShadowSpeedKmPerSec = math.Sqrt(event.DxKmPerSec*event.DxKmPerSec + event.DyKmPerSec*event.DyKmPerSec)
 	if event.ShadowSpeedKmPerSec > 0.0 {
-		event.PathAngleDegrees = math.Atan2(-event.DxKmPerSec, -event.DyKmPerSec) * 180.0 / math.Pi
-		if event.PathAngleDegrees < 0.0 {
-			event.PathAngleDegrees += 360.0
-		}
+		event.PathAngleDegrees = PathAngleFromVelocity(event.DxKmPerSec, event.DyKmPerSec)
 		fmt.Printf("\nPath angle is %0.1f degrees\n", event.PathAngleDegrees)
 		fmt.Printf("Shadow speed is %0.3f km/sec\n\n", event.ShadowSpeedKmPerSec)
 
@@ -477,6 +474,21 @@ func main() {
 		} else {
 			fmt.Println("Diffraction image with observation path saved to diffractionImageWithPath.png")
 		}
+
+		// Save a white image with only the observation path overlay
+		bounds := imgForDisplay.Bounds()
+		whiteImg := image.NewGray(bounds)
+		for i := range whiteImg.Pix {
+			whiteImg.Pix[i] = 255
+		}
+		pathOnly := DrawPathOnImage(whiteImg, p1.X, p1.Y, p2.X, p2.Y,
+			event.PathStart[0], event.PathStart[1], event.PathEnd[0], event.PathEnd[1])
+		err = SaveImagePNG("observationPath.png", pathOnly)
+		if err != nil {
+			fmt.Println(fmt.Errorf("writing of %q failed: %w", "observationPath.png", err))
+		} else {
+			fmt.Println("Observation path image saved to observationPath.png")
+		}
 	}
 
 	//if event.StarDiamKm > 0.0 {
@@ -634,6 +646,16 @@ func main() {
 			w3.SetContent(container.NewCenter(cameraImg))
 			w3.Resize(fyne.NewSize(950, 550))
 			w3.Show()
+		}
+
+		if event.ShadowSpeedKmPerSec > 0.0 {
+			pathImg := canvas.NewImageFromFile("observationPath.png")
+			pathImg.FillMode = canvas.ImageFillContain
+			wPath := myApp.NewWindow("Observation path")
+			wPath.SetPadded(false)
+			wPath.Resize(fyne.Size{Height: float32(size), Width: float32(size)})
+			wPath.SetContent(container.NewStack(pathImg))
+			wPath.Show()
 		}
 
 		w.ShowAndRun()

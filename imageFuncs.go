@@ -136,7 +136,7 @@ func MatrixToGray16Data(m [][]float64, scale float64) (*image.Gray16, error) {
 //	A) Min/Max stretch (simple)
 //	B) Percentile stretch (robust to outliers) <-- recommended
 //
-// This implements percentile stretch: map pLow to pHigh to 0..255 and clamp.
+// This implements percentile stretch: map p Low to pHigh to 0..255 and clamp.
 func MatrixToGrayViewPercentile(m [][]float64, pLow, pHigh float64) (*image.Gray, error) {
 	if len(m) == 0 || len(m[0]) == 0 {
 		return nil, errors.New("empty matrix")
@@ -343,56 +343,116 @@ func DrawPathOnImage(gray *image.Gray, x1, y1, x2, y2 float64,
 	result := image.NewRGBA(bounds)
 	draw.Draw(result, bounds, gray, bounds.Min, draw.Src)
 
+	// Scale line width and dot radius to ~1% of the larger image dimension
+	dim := bounds.Dx()
+	if bounds.Dy() > dim {
+		dim = bounds.Dy()
+	}
+	lineHalfWidth := float64(dim) / 400.0
+	if lineHalfWidth < 1.5 {
+		lineHalfWidth = 1.5
+	}
+	dotRadius := dim / 100
+	if dotRadius < 5 {
+		dotRadius = 5
+	}
+
 	// Draw the line in red
-	drawLineOnImage(result, x1, y1, x2, y2, color.RGBA{R: 255, A: 255})
+	drawLineOnImage(result, x1, y1, x2, y2, lineHalfWidth, color.RGBA{R: 255, A: 255})
 
 	// Draw the start dot (red)
-	drawDotOnImage(result, startX, startY, 5, color.RGBA{R: 255, A: 255})
+	drawDotOnImage(result, startX, startY, dotRadius, color.RGBA{R: 255, A: 255})
 
 	// Draw the end dot (green)
-	drawDotOnImage(result, endX, endY, 5, color.RGBA{G: 255, A: 255})
+	drawDotOnImage(result, endX, endY, dotRadius, color.RGBA{G: 255, A: 255})
 
 	return result
 }
 
-// drawLineOnImage draws a line using Bresenham's algorithm with 3-pixel width.
-func drawLineOnImage(img *image.RGBA, x1, y1, x2, y2 float64, col color.Color) {
-	dx := math.Abs(x2 - x1)
-	dy := math.Abs(y2 - y1)
-	sx := -1.0
-	if x1 < x2 {
-		sx = 1.0
-	}
-	sy := -1.0
-	if y1 < y2 {
-		sy = 1.0
-	}
-	err := dx - dy
+// drawLineOnImage draws an anti-aliased line with a given half-width.
+// For each pixel in the bounding box of the line (plus margin), it computes
+// the perpendicular distance to the line segment and blends accordingly.
+func drawLineOnImage(img *image.RGBA, x1, y1, x2, y2, halfWidth float64, col color.Color) {
 
-	for {
-		for oy := -1; oy <= 1; oy++ {
-			for ox := -1; ox <= 1; ox++ {
-				px := int(x1) + ox
-				py := int(y1) + oy
-				if px >= 0 && px < img.Bounds().Dx() && py >= 0 && py < img.Bounds().Dy() {
-					img.Set(px, py, col)
-				}
+	r, g, b, a := col.RGBA()
+	cr := uint8(r >> 8)
+	cg := uint8(g >> 8)
+	cb := uint8(b >> 8)
+	ca := uint8(a >> 8)
+
+	bounds := img.Bounds()
+	margin := halfWidth + 1.5 // extra margin for antialiasing fringe
+	minX := int(math.Floor(math.Min(x1, x2) - margin))
+	maxX := int(math.Ceil(math.Max(x1, x2) + margin))
+	minY := int(math.Floor(math.Min(y1, y2) - margin))
+	maxY := int(math.Ceil(math.Max(y1, y2) + margin))
+	if minX < bounds.Min.X {
+		minX = bounds.Min.X
+	}
+	if minY < bounds.Min.Y {
+		minY = bounds.Min.Y
+	}
+	if maxX > bounds.Max.X-1 {
+		maxX = bounds.Max.X - 1
+	}
+	if maxY > bounds.Max.Y-1 {
+		maxY = bounds.Max.Y - 1
+	}
+
+	// Line segment vector
+	ldx := x2 - x1
+	ldy := y2 - y1
+	lenSq := ldx*ldx + ldy*ldy
+
+	for py := minY; py <= maxY; py++ {
+		for px := minX; px <= maxX; px++ {
+			// Perpendicular distance from pixel center to line segment
+			dist := distToSegment(float64(px), float64(py), x1, y1, ldx, ldy, lenSq)
+
+			if dist > halfWidth+1.0 {
+				continue
 			}
-		}
 
-		if math.Abs(x1-x2) < 1 && math.Abs(y1-y2) < 1 {
-			break
-		}
-		e2 := 2 * err
-		if e2 > -dy {
-			err -= dy
-			x1 += sx
-		}
-		if e2 < dx {
-			err += dx
-			y1 += sy
+			// Coverage: 1.0 inside the line, smooth falloff at edges
+			coverage := math.Max(0, math.Min(1, halfWidth+0.5-dist))
+
+			if coverage <= 0 {
+				continue
+			}
+
+			// Alpha-blend the line color over the existing pixel
+			bg := img.RGBAAt(px, py)
+			alpha := float64(ca) / 255.0 * coverage
+			inv := 1.0 - alpha
+			nr := uint8(math.Min(255, float64(cr)*alpha+float64(bg.R)*inv))
+			ng := uint8(math.Min(255, float64(cg)*alpha+float64(bg.G)*inv))
+			nb := uint8(math.Min(255, float64(cb)*alpha+float64(bg.B)*inv))
+			na := uint8(math.Min(255, float64(ca)*alpha+float64(bg.A)*inv+alpha*255))
+			img.Pix[img.PixOffset(px, py)] = nr
+			img.Pix[img.PixOffset(px, py)+1] = ng
+			img.Pix[img.PixOffset(px, py)+2] = nb
+			img.Pix[img.PixOffset(px, py)+3] = na
 		}
 	}
+}
+
+// distToSegment returns the perpendicular distance from point (px, py) to the
+// line segment defined by start (sx, sy) and direction (dx, dy) with squared
+// length lenSq.
+func distToSegment(px, py, sx, sy, dx, dy, lenSq float64) float64 {
+	if lenSq == 0 {
+		return math.Hypot(px-sx, py-sy)
+	}
+	// Project point onto the line, clamping t to [0,1] for segment
+	t := ((px-sx)*dx + (py-sy)*dy) / lenSq
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
+	}
+	closestX := sx + t*dx
+	closestY := sy + t*dy
+	return math.Hypot(px-closestX, py-closestY)
 }
 
 // drawDotOnImage draws a filled circle on the image.

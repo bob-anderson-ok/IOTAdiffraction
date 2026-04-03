@@ -4,7 +4,8 @@
   window_size_pixels : 800,   // Optional but if omitted, a default size will be used so plots will be produced.
 
   // The title of the ground shadow display image.
-  title : "(9203) Myrtus 2025 Feb 22",        // Optional
+  // title : "(9203) Myrtus 2025 Feb 22",        // Optional
+  title : "(92590) 2000 PT13",        // Optional
 
   fundamental_plane_width_km : 40,            // Required. Size of the FOV in Km
   fundamental_plane_width_num_points : 2000,  // Required, but overridden if an external image is supplied
@@ -14,14 +15,15 @@
   // At least one must be present.
 
   parallax_arcsec : 3.7711,
-  distance_au : 2.33,
+  // distance_au : 2.33,
+  distance_au : 1.665,
 
   // If you want an integrated (white light) ground shadow image, supply a path to a QE table file.
   // Use the example QHY174 sensor response curve file as a template. When present,
   // a ground shadow image will be generated for each entry in the table.
   // Each image will be weighted by the QE value at that wavelength for summing with the other images.
 
-  // path_to_qe_table_file : "qhy174QEevery20nm",  // Optional. See note below if you need to include folder paths
+  path_to_qe_table_file : "qhy174QEevery20nm",  // Optional. See note below if you need to include folder paths
 
   // If your path contains back slashes, you must escape them with another back slash. See example below ...
   // Example: path_to_qe_table_file : "c:\\Users\\boban\\Dropbox\\GolandProjects\\OccultDiffraction\\qhy174QEevery20nm",
@@ -35,14 +37,19 @@
   // for Occult usage except for cross checking comparison during development). They are used
   // to extract a sample light curve from the diffraction shadow.
 
-  dX_km_per_sec : 5.074,    // Optional
-  dY_km_per_sec : -0.904,   // Optional
-  path_perpendicular_offset_from_center_km : -1.18,  // Optional. Defaults to 0.0 See note below for details
+  // dX_km_per_sec : 5.074,    // Optional
+  // dY_km_per_sec : -0.904,   // Optional
+  // path_perpendicular_offset_from_center_km : -1.18,  // Optional. Defaults to 0.0 See note below for details
+
+  dX_km_per_sec : 5,    // Optional
+  dY_km_per_sec : 0,   // Optional
+  path_perpendicular_offset_from_center_km : -0.68,  // Optional. Defaults to 0.0 See note below for details
+
 
   // The path_perpendicular_offset_from_center_km parameter is interpreted such that
   // positive values shift the observation path to the right of someone facing forward on the star path.
 
-  percent_mag_drop : 75,  // Optional. If omitted, 100 will be used
+  percent_mag_drop : 100,  // Optional. If omitted, 100 will be used
 
   // star_diam_on_plane_mas: 0.15,  // Optional. If omitted, 0.0 is used (i.e., no finite star calculation)
 
@@ -60,17 +67,17 @@
 
   main_body : {                 // Required if no external image is supplied
        x_center_km : 5.8,
-       y_center_km : 0.6,
-       major_axis_km : 17.6,
-       minor_axis_km : 8.0,
+       y_center_km : .68,
+       major_axis_km : 2.0,
+       minor_axis_km : 2.0,
        major_axis_pa_degrees : 98.3,
   },
 
   satellite : {                 // Optional
-      x_center_km : -5.8,
-      y_center_km : -0.6,
-      major_axis_km : 7.5,
-      minor_axis_km : 2.8,
+      x_center_km : 10.8,
+      y_center_km : .68,
+      major_axis_km : .5,
+      minor_axis_km : .5,
       major_axis_pa_degrees : 94.0,
   },
 
@@ -85,7 +92,7 @@
   // this value is found in the external image and to 255 everywhere else. The scheme is
   // simply if it's not 'sky', it is 'asteroid'.
 
-  path_to_external_image : "11293_2.png",
-  external_image_width_km : 21.8
+  path_to_external_image : "maley-double-sent.png",
+  external_image_width_km : 20.0
 
 }
