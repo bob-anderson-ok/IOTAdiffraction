@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.0.9"
+const version = "1.1.0"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -72,6 +72,9 @@ func main() {
 
 	programStart := time.Now()
 
+	// Remove any error log from a previous run
+	os.Remove("IOTAdiffractionError.log")
+
 	var p1 AnnotatedPoint
 	var p2 AnnotatedPoint
 
@@ -83,8 +86,7 @@ func main() {
 	args := os.Args
 
 	if len(args) < 2 || len(args) > 3 {
-		fmt.Println("\n\tWrong number of arguments.\n\tUsage: OccultDiffractionApp <parameter-file> [true|false]")
-		os.Exit(1)
+		exitWithError("\n\tWrong number of arguments.\n\tUsage: OccultDiffractionApp <parameter-file> [true|false]", 1)
 	}
 
 	path := args[1]
@@ -94,31 +96,27 @@ func main() {
 		var err error
 		showPlots, err = strconv.ParseBool(args[2])
 		if err != nil {
-			fmt.Println("\n\tSecond argument must be true or false.")
-			os.Exit(1)
+			exitWithError("\n\tSecond argument must be true or false.", 1)
 		}
 	}
 
 	// Read the Json5 (or Json) parameter file
 	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Println(fmt.Errorf("\n\tAttempt to read input file %q failed: %w\n", path, err))
-		os.Exit(2)
+		exitWithError(fmt.Sprintf("\n\tAttempt to read input file %q failed: %v\n", path, err), 2)
 	}
 
 	// Parse json(5) data into a generic container
 	var jsonTable map[string]interface{}
 	err = json.Unmarshal(data, &jsonTable)
 	if err != nil {
-		fmt.Println(fmt.Errorf("\n\tFormat error in file %q: %w\n", path, err))
-		os.Exit(3)
+		exitWithError(fmt.Sprintf("\n\tFormat error in file %q: %v\n", path, err), 3)
 	}
 
 	var event OccultationEvent
 	msg, ok := validateJsonFileAndFillEvent(jsonTable, &event)
 	if !ok {
-		fmt.Println(msg)
-		os.Exit(4)
+		exitWithError(msg, 4)
 	}
 
 	// Check for user wanting printout of complete jsonTable
@@ -132,20 +130,17 @@ func main() {
 		// Read the Json5 (or Json) parameter file
 		data, err := os.ReadFile(event.PathToQEtable)
 		if err != nil {
-			fmt.Println(fmt.Errorf("\n\tAttempt to read file %q failed: %w\n", path, err))
-			os.Exit(13)
+			exitWithError(fmt.Sprintf("\n\tAttempt to read file %q failed: %v\n", path, err), 13)
 		}
 		var qeTable [][2]float64
 		qeTable, err = parseArrayFormat(data)
 		if err != nil {
-			fmt.Println(fmt.Errorf("\n\tError reading camera response file %q: %w\n", event.PathToQEtable, err))
-			os.Exit(15)
+			exitWithError(fmt.Sprintf("\n\tError reading camera response file %q: %v\n", event.PathToQEtable, err), 15)
 		}
 		event.QEtable = qeTable
 		//fmt.Println("Got the camera table", len(qeTable), "entries")
 		if len(qeTable) < 1 {
-			fmt.Println(fmt.Errorf("\n\tThe camera response file %q is empty.", event.PathToQEtable))
-			os.Exit(14)
+			exitWithError(fmt.Sprintf("\n\tThe camera response file %q is empty.", event.PathToQEtable), 14)
 		}
 		var cumWeights = 0.0
 		for i := 0; i < len(qeTable); i++ {
@@ -159,8 +154,7 @@ func main() {
 
 	// Sanity check on number of points in a fundamental plane
 	if event.FundamentalPlaneWidthPoints < 10 {
-		fmt.Println(fmt.Errorf("\n\tThe fundamental plane width must be at least 10 points."))
-		os.Exit(16)
+		exitWithError("\n\tThe fundamental plane width must be at least 10 points.", 16)
 	}
 
 	Npts := event.FundamentalPlaneWidthPoints // Just a shorthand version
@@ -181,8 +175,7 @@ func main() {
 	if event.PathToExternalImage != "" {
 		f, err := os.Open(event.PathToExternalImage)
 		if err != nil {
-			fmt.Println(fmt.Errorf("\n\tAttempt to read external image %q failed: %w\n", event.PathToExternalImage, err))
-			os.Exit(5)
+			exitWithError(fmt.Sprintf("\n\tAttempt to read external image %q failed: %v\n", event.PathToExternalImage, err), 5)
 		}
 		//defer f.Close()
 		defer func() {
@@ -193,13 +186,11 @@ func main() {
 
 		img, err := png.Decode(f)
 		if err != nil {
-			fmt.Println(fmt.Errorf("\n\tAttempt to decode external image %q failed: %w\n", event.PathToExternalImage, err))
-			os.Exit(6)
+			exitWithError(fmt.Sprintf("\n\tAttempt to decode external image %q failed: %v\n", event.PathToExternalImage, err), 6)
 		}
 
 		if img.Bounds().Dx() != img.Bounds().Dy() {
-			fmt.Println(fmt.Errorf("\n\tThe supplied external image %q is not square.", event.PathToExternalImage))
-			os.Exit(7)
+			exitWithError(fmt.Sprintf("\n\tThe supplied external image %q is not square.", event.PathToExternalImage), 7)
 		}
 
 		// We require that an external image is in GRAY format (uint8) to match
@@ -226,9 +217,8 @@ func main() {
 				}
 			}
 		} else {
-			fmt.Println(fmt.Errorf("\n\tThe supplied external image %q is not type GRAY (found: %s).",
-				event.PathToExternalImage, ColorModelString(img.ColorModel())))
-			os.Exit(8)
+			exitWithError(fmt.Sprintf("\n\tThe supplied external image %q is not type GRAY (found: %s).",
+				event.PathToExternalImage, ColorModelString(img.ColorModel())), 8)
 		}
 
 		event.FplaneImage = grayImg
@@ -246,8 +236,7 @@ func main() {
 	AddEllipses(event, true)
 	err = SaveGrayPNG("geometricShadow.png", event.FplaneImage)
 	if err != nil {
-		fmt.Println(fmt.Errorf("\n\tFailed to write %q.", "geometricShadow.png"))
-		os.Exit(9)
+		exitWithError(fmt.Sprintf("\n\tFailed to write %q.", "geometricShadow.png"), 9)
 	}
 
 	sourcePlane := ConvertSourcePlaneImageToComplex(event.FplaneImage)
@@ -304,13 +293,11 @@ func main() {
 
 	// Some elementary checks to make sure that the user has not supplied bad parameters
 	if Lkm <= 0.0 {
-		fmt.Println(fmt.Errorf("\n\tFundamental plane width must be positive."))
-		os.Exit(10)
+		exitWithError("\n\tFundamental plane width must be positive.", 10)
 	}
 
 	if Zkm <= 0.0 {
-		fmt.Println(fmt.Errorf("\n\tDistance given is invalid."))
-		os.Exit(10)
+		exitWithError("\n\tDistance given is invalid.", 10)
 	}
 
 	event.ShadowSpeedKmPerSec = math.Sqrt(event.DxKmPerSec*event.DxKmPerSec + event.DyKmPerSec*event.DyKmPerSec)
@@ -322,8 +309,7 @@ func main() {
 		// The following function sets event.PathStart and event.PathEnd variables
 		p1, p2, event.PathDirection, err = processPathDirection(Npts, p1, p2, &event)
 		if err != nil {
-			fmt.Println(fmt.Errorf("\n\tProcessing of path direction failed: %w", err))
-			os.Exit(10)
+			exitWithError(fmt.Sprintf("\n\tProcessing of path direction failed: %v", err), 10)
 		}
 		fmt.Printf("Direction: %s\n", event.PathDirection)
 		computePathPoints(&event)
@@ -369,8 +355,7 @@ func main() {
 
 	event.IntensityMatrix, err = Reshape1DTo2D(intensity, Npts, Npts)
 	if err != nil {
-		fmt.Println(fmt.Errorf("reshape of intensity vector failed: %w", err))
-		os.Exit(10)
+		exitWithError(fmt.Sprintf("reshape of intensity vector failed: %v", err), 10)
 	}
 
 	// Here we apply any necessary magDrop adjustments
@@ -402,8 +387,7 @@ func main() {
 		start := time.Now()
 		newImage, err = ConvolvePSFFFT(event.IntensityMatrix, starImage, sumOfWeights, ConvSame, PadReplicate, false)
 		if err != nil {
-			fmt.Println(fmt.Errorf("convolution of intensity matrix with star image failed: %w", err))
-			os.Exit(13)
+			exitWithError(fmt.Sprintf("convolution of intensity matrix with star image failed: %v", err), 13)
 		}
 
 		event.IntensityMatrix = newImage
@@ -414,53 +398,45 @@ func main() {
 		imgForDisplay, err = MatrixToGrayViewPercentile(newImage, 0.0, 100)
 		// comment place here just to suppress dup lines warning
 		if err != nil {
-			fmt.Println(fmt.Errorf("creation of the display image failed: %w", err))
-			os.Exit(11)
+			exitWithError(fmt.Sprintf("creation of the display image failed: %v", err), 11)
 		}
 
 		err = SaveGrayPNG("diffractionImage8bit.png", imgForDisplay)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "diffractionImage8bit.png", err))
-			os.Exit(12)
+			exitWithError(fmt.Sprintf("writing of %q failed: %v", "diffractionImage8bit.png", err), 12)
 		}
 
 		// Make the scientific (well-defined scaling) version of the intensity matrix
 		occultImage, err := MatrixToGray16Data(newImage, 4000)
 		if err != nil {
-			fmt.Println(fmt.Errorf("creation of occultImage failed: %w", err))
-			os.Exit(13)
+			exitWithError(fmt.Sprintf("creation of occultImage failed: %v", err), 13)
 		}
 
 		err = SaveGray16PNG("targetImage16bit.png", occultImage)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
-			os.Exit(14)
+			exitWithError(fmt.Sprintf("writing of %q failed: %v", "targetImage16bit.png", err), 14)
 		}
 	} else {
 		// Make a user-friendly .png of the observation intensity matrix
 		imgForDisplay, err = MatrixToGrayViewPercentile(event.IntensityMatrix, 0.0, 100)
 		if err != nil {
-			fmt.Println(fmt.Errorf("creation of the display image failed: %w", err))
-			os.Exit(11)
+			exitWithError(fmt.Sprintf("creation of the display image failed: %v", err), 11)
 		}
 
 		err = SaveGrayPNG("diffractionImage8bit.png", imgForDisplay)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "diffractionImage8bit.png", err))
-			os.Exit(12)
+			exitWithError(fmt.Sprintf("writing of %q failed: %v", "diffractionImage8bit.png", err), 12)
 		}
 
 		// Make the scientific (well-defined scaling) version of the intensity matrix
 		occultImage, err := MatrixToGray16Data(event.IntensityMatrix, 4000)
 		if err != nil {
-			fmt.Println(fmt.Errorf("creation of occultImage failed: %w", err))
-			os.Exit(13)
+			exitWithError(fmt.Sprintf("creation of occultImage failed: %v", err), 13)
 		}
 
 		err = SaveGray16PNG("targetImage16bit.png", occultImage)
 		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "targetImage16bit.png", err))
-			os.Exit(14)
+			exitWithError(fmt.Sprintf("writing of %q failed: %v", "targetImage16bit.png", err), 14)
 		}
 	}
 
@@ -541,24 +517,20 @@ func main() {
 			edges := FindEdgesInGeometricShadow(event)
 			plotImg, err := makePlotImage(event.PathDirection, 1200, 500, event, edges)
 			if err != nil {
-				fmt.Println(fmt.Errorf("creating light curve plot failed: %w", err))
-				os.Exit(15)
+				exitWithError(fmt.Sprintf("creating light curve plot failed: %v", err), 15)
 			}
 			f, err := os.Create("lightCurvePlot.png")
 			if err != nil {
-				fmt.Println(fmt.Errorf("creating lightCurvePlot.png failed: %w", err))
-				os.Exit(16)
+				exitWithError(fmt.Sprintf("creating lightCurvePlot.png failed: %v", err), 16)
 			}
 			if err := png.Encode(f, plotImg); err != nil {
 				if cerr := f.Close(); cerr != nil {
 					fmt.Println(fmt.Errorf("closing lightCurvePlot.png failed: %w", cerr))
 				}
-				fmt.Println(fmt.Errorf("writing lightCurvePlot.png failed: %w", err))
-				os.Exit(17)
+				exitWithError(fmt.Sprintf("writing lightCurvePlot.png failed: %v", err), 17)
 			}
 			if err := f.Close(); err != nil {
-				fmt.Println(fmt.Errorf("closing lightCurvePlot.png failed: %w", err))
-				os.Exit(18)
+				exitWithError(fmt.Sprintf("closing lightCurvePlot.png failed: %v", err), 18)
 			}
 			fmt.Println("Light curve plot saved to lightCurvePlot.png")
 		}
@@ -648,16 +620,6 @@ func main() {
 			w3.Show()
 		}
 
-		if event.ShadowSpeedKmPerSec > 0.0 {
-			pathImg := canvas.NewImageFromFile("observationPath.png")
-			pathImg.FillMode = canvas.ImageFillContain
-			wPath := myApp.NewWindow("Observation path")
-			wPath.SetPadded(false)
-			wPath.Resize(fyne.Size{Height: float32(size), Width: float32(size)})
-			wPath.SetContent(container.NewStack(pathImg))
-			wPath.Show()
-		}
-
 		w.ShowAndRun()
 	}
 }
@@ -675,6 +637,21 @@ func placeDotAt(x, y, diameter float32, col color.Color) *canvas.Circle {
 	dot.Resize(fyne.NewSize(diameter, diameter))
 	dot.Move(fyne.NewPos(x-diameter/2, y-diameter/2))
 	return dot
+}
+
+func writeErrorToLog(msg string) {
+	f, err := os.OpenFile("IOTAdiffractionError.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintln(f, msg)
+}
+
+func exitWithError(msg string, code int) {
+	fmt.Println(msg)
+	writeErrorToLog(msg)
+	os.Exit(code)
 }
 
 func computePathPoints(e *OccultationEvent) {

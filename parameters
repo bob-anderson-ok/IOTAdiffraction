@@ -93,6 +93,5 @@
   // simply if it's not 'sky', it is 'asteroid'.
 
   path_to_external_image : "maley-double-sent.png",
-  external_image_width_km : 20.0
 
 }
