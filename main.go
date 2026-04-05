@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.1.0"
+const version = "1.1.1"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -221,12 +221,28 @@ func main() {
 				event.PathToExternalImage, ColorModelString(img.ColorModel())), 8)
 		}
 
-		event.FplaneImage = grayImg
-
-		// Override the value (possibly) supplied in the fundamental_plane_width_num_points parameter
-		event.FundamentalPlaneWidthPoints = img.Bounds().Dx()
-		Npts = event.FundamentalPlaneWidthPoints // Shorthand
-		fmt.Printf("External image loaded. Color model in use: %s\n", ColorModelString(event.FplaneImage.ColorModel()))
+		extSize := img.Bounds().Dx()
+		if extSize > Npts {
+			// External image is larger than the fundamental plane; override the plane size
+			event.FundamentalPlaneWidthPoints = extSize
+			Npts = extSize
+			event.FplaneImage = grayImg
+		} else if extSize == Npts {
+			event.FplaneImage = grayImg
+		} else {
+			// External image is smaller; center it in an Npts x Npts fundamental plane
+			event.FplaneImage = image.NewGray(image.Rect(0, 0, Npts, Npts))
+			FillFplane(event.FplaneImage, true)
+			offsetX := (Npts - extSize) / 2
+			offsetY := (Npts - extSize) / 2
+			for y := 0; y < extSize; y++ {
+				for x := 0; x < extSize; x++ {
+					event.FplaneImage.SetGray(x+offsetX, y+offsetY, grayImg.GrayAt(x, y))
+				}
+			}
+		}
+		fmt.Printf("External image loaded (%d x %d). Fundamental plane is %d x %d. Color model: %s\n",
+			extSize, extSize, Npts, Npts, ColorModelString(event.FplaneImage.ColorModel()))
 		fmt.Printf("external_image_width_km: %g\n", event.ExternalImageWidthKm)
 	} else { // No image supplied by user, so we start our own.
 		event.FplaneImage = image.NewGray(image.Rect(0, 0, Npts, Npts))

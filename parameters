@@ -8,7 +8,7 @@
   title : "(92590) 2000 PT13",        // Optional
 
   fundamental_plane_width_km : 40,            // Required. Size of the FOV in Km
-  fundamental_plane_width_num_points : 2000,  // Required, but overridden if an external image is supplied
+  fundamental_plane_width_num_points : 1000,  // Required, but overridden if an external image is supplied
 
   // Distance to the asteroid can be specified either in au or in arcsec.
   // If both are present, parallax_arcsec is used.
@@ -92,6 +92,6 @@
   // this value is found in the external image and to 255 everywhere else. The scheme is
   // simply if it's not 'sky', it is 'asteroid'.
 
-  path_to_external_image : "maley-double-sent.png",
+  path_to_external_image : "maley-double.png",
 
 }
