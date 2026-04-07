@@ -59,6 +59,52 @@ func BuildStarPsf(starDiamKm, resolutionPointsPerKm, limbDarkeningCoeff float64)
 	return starMatrix, sumOfWeights
 }
 
+// BuildDoubleStarPsf builds a PSF for a double star system. The two stars are placed
+// symmetrically about the PSF center, separated by separationKm at an angle of
+// angleDegreesCCW counter-clockwise from vertical.
+func BuildDoubleStarPsf(star1DiamKm, star2DiamKm, separationKm, angleDegreesCCW,
+	resolutionKmPerPixel, limbDarkeningCoeff1, limbDarkeningCoeff2, star2BrightFrac float64) ([][]float64, float64) {
+
+	halfSepPixels := separationKm / (2.0 * resolutionKmPerPixel)
+	angleRad := angleDegreesCCW * math.Pi / 180.0
+
+	// Offset from center (vertical = -Y in row/col coords)
+	dCol := -halfSepPixels * math.Sin(angleRad)
+	dRow := -halfSepPixels * math.Cos(angleRad)
+
+	star1RadiusPixels := star1DiamKm / (2.0 * resolutionKmPerPixel)
+	star2RadiusPixels := star2DiamKm / (2.0 * resolutionKmPerPixel)
+
+	// PSF must be large enough to contain both offset disks
+	maxExtent := math.Ceil(halfSepPixels + math.Max(star1RadiusPixels, star2RadiusPixels))
+	psfHalf := int(maxExtent) + 3 // border
+	psfWidth := psfHalf*2 + 1
+
+	center := float64(psfHalf)
+	sumOfWeights := 0.0
+	starMatrix := make([][]float64, psfWidth)
+	for row := 0; row < psfWidth; row++ {
+		starMatrix[row] = make([]float64, psfWidth)
+		for col := 0; col < psfWidth; col++ {
+			fr := float64(row) - center
+			fc := float64(col) - center
+
+			// Distance from this pixel to star 1 center
+			r1 := math.Sqrt((fr-dRow)*(fr-dRow)+(fc-dCol)*(fc-dCol)) * resolutionKmPerPixel
+			b1 := StarBrightness(r1, star1DiamKm, limbDarkeningCoeff1)
+
+			// Distance from this pixel to star 2 center
+			r2 := math.Sqrt((fr+dRow)*(fr+dRow)+(fc+dCol)*(fc+dCol)) * resolutionKmPerPixel
+			b2 := StarBrightness(r2, star2DiamKm, limbDarkeningCoeff2) * star2BrightFrac
+
+			val := b1 + b2
+			starMatrix[row][col] = val
+			sumOfWeights += val
+		}
+	}
+	return starMatrix, sumOfWeights
+}
+
 // ConvolvePSFFFT convolves image with a centered PSF using 2D FFT.
 //
 // image: HxW
@@ -145,7 +191,7 @@ func ConvolvePSFFFT(image, psf [][]float64, starSum float64, mode ConvMode, pad 
 		}
 	}
 
-	// 2D FFT: rows then columns using Gonum CmplxFFT. :contentReference[oaicite:2]{index=2}
+	// 2D FFT: rows then columns using Gonum CmplxFFT :contentReference[oaicite:2]{index=2}
 	fft2InPlace(A, true)
 	fft2InPlace(B, true)
 
@@ -361,9 +407,3 @@ func reflectIndex(i, n int) int {
 }
 
 // Optional: avoid tiny negative zeros if you care.
-func cleanZero(x float64) float64 {
-	if math.Abs(x) < 1e-15 {
-		return 0
-	}
-	return x
-}

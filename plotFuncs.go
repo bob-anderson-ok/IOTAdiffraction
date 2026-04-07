@@ -20,7 +20,7 @@ import (
 	"gonum.org/v1/plot/vg/vgimg"
 )
 
-func makePlotImage(direction string, wPx, hPx float64, e OccultationEvent, edges []float64) (image.Image, error) {
+func makePlotImage(wPx, hPx float64, e OccultationEvent, edges []float64) (image.Image, error) {
 
 	p := plot.New()
 
@@ -256,4 +256,114 @@ func MakeCameraResponsePlot(data [][2]float64, filename string) {
 		log.Fatal(err)
 	}
 	return
+}
+
+func makeStarProfileImage(wPx, hPx float64, e OccultationEvent) (image.Image, error) {
+	p := plot.New()
+
+	p.Title.TextStyle.Font.Typeface = "Liberation"
+	p.Title.TextStyle.Font.Variant = "Sans"
+	p.Title.TextStyle.Font.Size = vg.Points(24)
+
+	p.X.Label.TextStyle.Font.Typeface = "Liberation"
+	p.X.Label.TextStyle.Font.Variant = "Sans"
+	p.X.Label.TextStyle.Font.Size = vg.Points(24)
+
+	p.Y.Label.TextStyle.Font.Typeface = "Liberation"
+	p.Y.Label.TextStyle.Font.Variant = "Sans"
+	p.Y.Label.TextStyle.Font.Size = vg.Points(24)
+
+	p.X.Tick.Label.Font.Typeface = "Liberation"
+	p.X.Tick.Label.Font.Variant = "Sans"
+	p.X.Tick.Label.Font.Size = vg.Points(20)
+
+	p.Y.Tick.Label.Font.Typeface = "Liberation"
+	p.Y.Tick.Label.Font.Variant = "Sans"
+	p.Y.Tick.Label.Font.Size = vg.Points(20)
+
+	p.X.Label.Text = "Position (km)"
+	p.Y.Label.Text = "Relative brightness"
+	p.Y.Min = 0.0
+	p.Y.Max = 1.1
+
+	numPoints := 500
+
+	if e.Star2DiamKm > 0.0 {
+		p.Title.Text = fmt.Sprintf("Star intensity profiles — limb darkening: star1=%.2f, star2=%.2f",
+			e.LimbDarkeningCoeff, e.LimbDarkeningCoeff2)
+		if e.Star2BrightnessFraction < 1.0 {
+			p.Title.Text += fmt.Sprintf("\nstar2 brightness fraction: %.2f", e.Star2BrightnessFraction)
+		}
+
+		halfSepKm := e.StarSeparationKm / 2.0
+		maxExtent := halfSepKm + math.Max(e.StarDiamKm, e.Star2DiamKm)/2.0
+		margin := maxExtent * 0.2
+		xMin := -(maxExtent + margin)
+		xMax := maxExtent + margin
+		step := (xMax - xMin) / float64(numPoints-1)
+
+		pts1 := make(plotter.XYs, numPoints)
+		pts2 := make(plotter.XYs, numPoints)
+		for i := 0; i < numPoints; i++ {
+			x := xMin + float64(i)*step
+			pts1[i].X = x
+			pts1[i].Y = StarBrightness(math.Abs(x-(-halfSepKm)), e.StarDiamKm, e.LimbDarkeningCoeff)
+			pts2[i].X = x
+			pts2[i].Y = StarBrightness(math.Abs(x-halfSepKm), e.Star2DiamKm, e.LimbDarkeningCoeff2) * e.Star2BrightnessFraction
+		}
+
+		line1, err := plotter.NewLine(pts1)
+		if err != nil {
+			return nil, fmt.Errorf("star1 profile line: %w", err)
+		}
+		line1.Color = color.RGBA{R: 255, G: 165, B: 0, A: 255} // orange
+		line1.Width = vg.Points(2)
+
+		line2, err := plotter.NewLine(pts2)
+		if err != nil {
+			return nil, fmt.Errorf("star2 profile line: %w", err)
+		}
+		line2.Color = color.RGBA{R: 0, G: 0, B: 255, A: 255} // blue
+		line2.Width = vg.Points(2)
+
+		p.Add(line1, line2)
+		p.Legend.Add(fmt.Sprintf("Star 1 (%.3f km)", e.StarDiamKm), line1)
+		p.Legend.Add(fmt.Sprintf("Star 2 (%.3f km)", e.Star2DiamKm), line2)
+	} else {
+		p.Title.Text = fmt.Sprintf("Star intensity profile — limb darkening coeff: %.2f",
+			e.LimbDarkeningCoeff)
+
+		starRadius := e.StarDiamKm / 2.0
+		margin := starRadius * 0.2
+		xMin := -(starRadius + margin)
+		xMax := starRadius + margin
+		step := (xMax - xMin) / float64(numPoints-1)
+
+		pts := make(plotter.XYs, numPoints)
+		for i := 0; i < numPoints; i++ {
+			x := xMin + float64(i)*step
+			pts[i].X = x
+			pts[i].Y = StarBrightness(math.Abs(x), e.StarDiamKm, e.LimbDarkeningCoeff)
+		}
+
+		line, err := plotter.NewLine(pts)
+		if err != nil {
+			return nil, fmt.Errorf("star profile line: %w", err)
+		}
+		line.Color = color.RGBA{R: 255, G: 165, B: 0, A: 255}
+		line.Width = vg.Points(2)
+
+		p.Add(line)
+		p.Legend.Add(fmt.Sprintf("Star (%.3f km)", e.StarDiamKm), line)
+	}
+
+	p.Legend.Top = true
+	p.Legend.TextStyle.Font.Typeface = "Liberation"
+	p.Legend.TextStyle.Font.Variant = "Sans"
+	p.Legend.TextStyle.Font.Size = vg.Points(20)
+
+	c := vgimg.New(vg.Length(wPx), vg.Length(hPx))
+	dc := draw.New(c)
+	p.Draw(dc)
+	return c.Image(), nil
 }

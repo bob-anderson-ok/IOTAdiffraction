@@ -18,7 +18,7 @@ import (
 )
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.1.1"
+const version = "1.2.0"
 
 // !!!!! This MUST match the app name given in the run configuration !!!!!
 
@@ -49,7 +49,14 @@ type OccultationEvent struct {
 	StarName                        string
 	StarDiamMas                     float64
 	StarDiamKm                      float64
+	Star2DiamMas                    float64
+	Star2DiamKm                     float64
+	StarSeparationMas               float64
+	StarSeparationKm                float64
+	StarAngleDegreesCCW             float64
+	Star2BrightnessFraction         float64
 	LimbDarkeningCoeff              float64
+	LimbDarkeningCoeff2             float64
 	StarClass                       string
 	PercentMagDrop                  float64
 	ParallaxArcsec                  float64
@@ -73,7 +80,7 @@ func main() {
 	programStart := time.Now()
 
 	// Remove any error log from a previous run
-	os.Remove("IOTAdiffractionError.log")
+	_ = os.Remove("IOTAdiffractionError.log")
 
 	var p1 AnnotatedPoint
 	var p2 AnnotatedPoint
@@ -219,6 +226,7 @@ func main() {
 		} else {
 			exitWithError(fmt.Sprintf("\n\tThe supplied external image %q is not type GRAY (found: %s).",
 				event.PathToExternalImage, ColorModelString(img.ColorModel())), 8)
+			panic("unreachable")
 		}
 
 		extSize := img.Bounds().Dx()
@@ -230,7 +238,7 @@ func main() {
 		} else if extSize == Npts {
 			event.FplaneImage = grayImg
 		} else {
-			// External image is smaller; center it in an Npts x Npts fundamental plane
+			// External image is smaller; center it in a Npts x Npts fundamental plane
 			event.FplaneImage = image.NewGray(image.Rect(0, 0, Npts, Npts))
 			FillFplane(event.FplaneImage, true)
 			offsetX := (Npts - extSize) / 2
@@ -332,7 +340,10 @@ func main() {
 
 	}
 
-	event.StarDiamKm = 1.496e8 * event.DistanceAu * event.StarDiamMas / (1000.0 * 206265)
+	masToKm := 1.496e8 * event.DistanceAu / (1000.0 * 206265)
+	event.StarDiamKm = masToKm * event.StarDiamMas
+	event.Star2DiamKm = masToKm * event.Star2DiamMas
+	event.StarSeparationKm = masToKm * event.StarSeparationMas
 
 	var eField []complex128
 	if len(event.QEtable) > 0 {
@@ -395,10 +406,27 @@ func main() {
 
 	var newImage [][]float64
 	var imgForDisplay *image.Gray
+	var starImage [][]float64
 
 	if event.StarDiamKm > 0.0 {
-		fmt.Printf("\nStar diameter projected at the plane of the asteroid is %0.3f km\n\n", event.StarDiamKm)
-		starImage, sumOfWeights := BuildStarPsf(event.StarDiamKm, resolution, event.LimbDarkeningCoeff)
+		var sumOfWeights float64
+		if event.Star2DiamKm > 0.0 {
+			fmt.Printf("\nDouble star: star1=%0.3f km, star2=%0.3f km, separation=%0.3f km, angle=%0.1f deg CCW\n\n",
+				event.StarDiamKm, event.Star2DiamKm, event.StarSeparationKm, event.StarAngleDegreesCCW)
+			starImage, sumOfWeights = BuildDoubleStarPsf(event.StarDiamKm, event.Star2DiamKm,
+				event.StarSeparationKm, event.StarAngleDegreesCCW, resolution,
+				event.LimbDarkeningCoeff, event.LimbDarkeningCoeff2, event.Star2BrightnessFraction)
+		} else {
+			fmt.Printf("\nStar diameter projected at the plane of the asteroid is %0.3f km\n\n", event.StarDiamKm)
+			starImage, sumOfWeights = BuildStarPsf(event.StarDiamKm, resolution, event.LimbDarkeningCoeff)
+		}
+
+		psfRows := len(starImage)
+		psfCols := len(starImage[0])
+		if psfRows >= Npts || psfCols >= Npts {
+			exitWithError(fmt.Sprintf("Star PSF (%dx%d pixels) exceeds image size (%dx%d pixels).",
+				psfCols, psfRows, Npts, Npts), 15)
+		}
 
 		start := time.Now()
 		newImage, err = ConvolvePSFFFT(event.IntensityMatrix, starImage, sumOfWeights, ConvSame, PadReplicate, false)
@@ -459,27 +487,19 @@ func main() {
 	// Save a diffraction image with an observation path overlay
 	if event.ShadowSpeedKmPerSec > 0.0 && imgForDisplay != nil {
 		annotated := DrawPathOnImage(imgForDisplay, p1.X, p1.Y, p2.X, p2.Y,
-			event.PathStart[0], event.PathStart[1], event.PathEnd[0], event.PathEnd[1])
+			event.PathStart[0], event.PathStart[1], event.PathEnd[0], event.PathEnd[1],
+			event.StarDiamKm <= 0.0)
+
+		if starImage != nil {
+			yellow := color.RGBA{R: 255, G: 255, B: 0, A: 255}
+			drawPsfOnImage(annotated, event.PathStart[0], event.PathStart[1], starImage, yellow)
+		}
+
 		err = SaveImagePNG("diffractionImageWithPath.png", annotated)
 		if err != nil {
 			fmt.Println(fmt.Errorf("writing of %q failed: %w", "diffractionImageWithPath.png", err))
 		} else {
 			fmt.Println("Diffraction image with observation path saved to diffractionImageWithPath.png")
-		}
-
-		// Save a white image with only the observation path overlay
-		bounds := imgForDisplay.Bounds()
-		whiteImg := image.NewGray(bounds)
-		for i := range whiteImg.Pix {
-			whiteImg.Pix[i] = 255
-		}
-		pathOnly := DrawPathOnImage(whiteImg, p1.X, p1.Y, p2.X, p2.Y,
-			event.PathStart[0], event.PathStart[1], event.PathEnd[0], event.PathEnd[1])
-		err = SaveImagePNG("observationPath.png", pathOnly)
-		if err != nil {
-			fmt.Println(fmt.Errorf("writing of %q failed: %w", "observationPath.png", err))
-		} else {
-			fmt.Println("Observation path image saved to observationPath.png")
 		}
 	}
 
@@ -531,7 +551,7 @@ func main() {
 		// Save plots as PNG files instead of displaying them
 		if event.ShadowSpeedKmPerSec > 0.0 {
 			edges := FindEdgesInGeometricShadow(event)
-			plotImg, err := makePlotImage(event.PathDirection, 1200, 500, event, edges)
+			plotImg, err := makePlotImage(1200, 500, event, edges)
 			if err != nil {
 				exitWithError(fmt.Sprintf("creating light curve plot failed: %v", err), 15)
 			}
@@ -555,52 +575,26 @@ func main() {
 		size := event.WindowSizePixels
 
 		winTitle := event.Title
-		if len(event.QEtable) > 0 {
-			winTitle += " (multi-wavelength composite using camera response curve)"
+		if event.StarDiamKm > 0.0 {
+			winTitle += " - star(s) shown at path start"
 		}
 
 		// w is our main window, created at the beginning of the program
 		w.SetTitle(winTitle)
 		w.SetPadded(false)
 		w.CenterOnScreen()
+		w.SetMaster()
 
-		img := canvas.NewImageFromFile("diffractionImage8bit.png")
+		var secondaryWindows []fyne.Window
 
+		imgFile := "diffractionImage8bit.png"
+		if event.ShadowSpeedKmPerSec > 0.0 {
+			imgFile = "diffractionImageWithPath.png"
+		}
+		img := canvas.NewImageFromFile(imgFile)
 		img.FillMode = canvas.ImageFillContain
 		w.Resize(fyne.Size{Height: float32(size), Width: float32(size)})
-
 		w.SetContent(container.NewStack(img))
-
-		// Here we add a red line to show the star path with colored dots at the ends to show direction(red to green)
-		if event.ShadowSpeedKmPerSec > 0.0 {
-			line := canvas.NewLine(color.RGBA{R: 255, A: 255})
-			// Convert row, col values to window coordinates
-			scaledY1 := float32(p1.Y) / float32(Npts) * float32(size)
-			scaledX1 := float32(p1.X) / float32(Npts) * float32(size)
-
-			scaledY2 := float32(p2.Y) / float32(Npts) * float32(size)
-			scaledX2 := float32(p2.X) / float32(Npts) * float32(size)
-
-			line.Position1 = fyne.NewPos(scaledX1, scaledY1)
-			line.Position2 = fyne.NewPos(scaledX2, scaledY2)
-			line.StrokeWidth = 2
-
-			// Here we use PathStart and PathEnd to place red and green dots at the start and end of the real path
-
-			dotSize := float32(10)
-			scaledDotX := float32(event.PathStart[0]) / float32(Npts) * float32(size)
-			scaledDotY := float32(event.PathStart[1]) / float32(Npts) * float32(size)
-			startDot := placeDotAt(scaledDotX, scaledDotY, dotSize, color.RGBA{R: 255, A: 255})
-
-			scaledDotX = float32(event.PathEnd[0]) / float32(Npts) * float32(size)
-			scaledDotY = float32(event.PathEnd[1]) / float32(Npts) * float32(size)
-			endDot := placeDotAt(scaledDotX, scaledDotY, dotSize, color.RGBA{G: 255, A: 255})
-
-			content := container.NewWithoutLayout(img, line, startDot, endDot)
-			w.SetContent(content)
-		} else {
-			w.SetContent(container.NewStack(img))
-		}
 		w.Show()
 
 		var img2 image.Image
@@ -608,7 +602,7 @@ func main() {
 		if event.ShadowSpeedKmPerSec > 0.0 {
 			gotCurveToPlot = true
 			edges := FindEdgesInGeometricShadow(event)
-			img2, err = makePlotImage(event.PathDirection, 1200, 500, event, edges)
+			img2, err = makePlotImage(1200, 500, event, edges)
 			if err != nil {
 				panic(err)
 			}
@@ -623,6 +617,7 @@ func main() {
 			w2.SetContent(container.NewCenter(plotImg))
 			w2.Resize(fyne.NewSize(950, 550))
 			w2.Show()
+			secondaryWindows = append(secondaryWindows, w2)
 		}
 
 		if len(event.QEtable) > 0 {
@@ -634,7 +629,32 @@ func main() {
 			w3.SetContent(container.NewCenter(cameraImg))
 			w3.Resize(fyne.NewSize(950, 550))
 			w3.Show()
+			secondaryWindows = append(secondaryWindows, w3)
 		}
+
+		if event.StarDiamKm > 0.0 {
+			profileImg, profileErr := makeStarProfileImage(1200, 500, event)
+			if profileErr != nil {
+				fmt.Println(fmt.Errorf("star profile plot failed: %w", profileErr))
+			} else {
+				starPlot := canvas.NewImageFromImage(profileImg)
+				starPlot.FillMode = canvas.ImageFillContain
+				starPlot.SetMinSize(fyne.NewSize(1200, 500))
+
+				w4 := myApp.NewWindow("Star intensity profile")
+				w4.SetContent(container.NewCenter(starPlot))
+				w4.Resize(fyne.NewSize(950, 550))
+				w4.Show()
+				secondaryWindows = append(secondaryWindows, w4)
+			}
+		}
+
+		w.SetCloseIntercept(func() {
+			for _, sw := range secondaryWindows {
+				sw.Close()
+			}
+			w.Close()
+		})
 
 		w.ShowAndRun()
 	}
@@ -648,20 +668,13 @@ func FresnelScale(wavelengthNm, ZAu float64) float64 {
 	return math.Sqrt(wavelengthKm * ZKm / 2)
 }
 
-func placeDotAt(x, y, diameter float32, col color.Color) *canvas.Circle {
-	dot := canvas.NewCircle(col)
-	dot.Resize(fyne.NewSize(diameter, diameter))
-	dot.Move(fyne.NewPos(x-diameter/2, y-diameter/2))
-	return dot
-}
-
 func writeErrorToLog(msg string) {
 	f, err := os.OpenFile("IOTAdiffractionError.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintln(f, msg)
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintln(f, msg)
 }
 
 func exitWithError(msg string, code int) {

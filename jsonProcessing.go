@@ -211,6 +211,54 @@ func validateJsonFileAndFillEvent(jsonTable map[string]interface{}, event *Occul
 		}
 	}
 
+	star2Diam, ok := getLeafValue(jsonTable, "star2_diam_on_plane_mas")
+	if !ok {
+		event.Star2DiamMas = 0.0
+	} else {
+		event.Star2DiamMas, ok = star2Diam.(float64)
+		if !ok {
+			msg = "star2_diam_on_plane_mas: is not a float64"
+			return msg, false
+		}
+
+		starSep, sepOk := getLeafValue(jsonTable, "star_separation_mas")
+		if !sepOk {
+			msg = "star_separation_mas is required when star2_diam_on_plane_mas is present"
+			return msg, false
+		}
+		event.StarSeparationMas, ok = starSep.(float64)
+		if !ok {
+			msg = "star_separation_mas: is not a float64"
+			return msg, false
+		}
+
+		starAngle, angleOk := getLeafValue(jsonTable, "star_angle_degrees_ccw")
+		if !angleOk {
+			msg = "star_angle_degrees_ccw is required when star2_diam_on_plane_mas is present"
+			return msg, false
+		}
+		event.StarAngleDegreesCCW, ok = starAngle.(float64)
+		if !ok {
+			msg = "star_angle_degrees_ccw: is not a float64"
+			return msg, false
+		}
+
+		brightFrac, fracOk := getLeafValue(jsonTable, "star2_brightness_fraction")
+		if !fracOk {
+			event.Star2BrightnessFraction = 1.0 // default: equal brightness
+		} else {
+			event.Star2BrightnessFraction, ok = brightFrac.(float64)
+			if !ok {
+				msg = "star2_brightness_fraction: is not a float64"
+				return msg, false
+			}
+			if event.Star2BrightnessFraction < 0.0 || event.Star2BrightnessFraction > 1.0 {
+				msg = "star2_brightness_fraction: must be between 0.0 and 1.0"
+				return msg, false
+			}
+		}
+	}
+
 	limbCoeff, ok := getLeafValue(jsonTable, "limb_darkening_coeff")
 	if !ok {
 		event.LimbDarkeningCoeff = 0.0 // Default value
@@ -218,6 +266,17 @@ func validateJsonFileAndFillEvent(jsonTable map[string]interface{}, event *Occul
 		event.LimbDarkeningCoeff, ok = limbCoeff.(float64)
 		if !ok {
 			msg = "limb_darkening_coeff: is not a float64"
+			return msg, false
+		}
+	}
+
+	limbCoeff2, ok := getLeafValue(jsonTable, "limb_darkening_coeff2")
+	if !ok {
+		event.LimbDarkeningCoeff2 = 0.0
+	} else {
+		event.LimbDarkeningCoeff2, ok = limbCoeff2.(float64)
+		if !ok {
+			msg = "limb_darkening_coeff2: is not a float64"
 			return msg, false
 		}
 	}

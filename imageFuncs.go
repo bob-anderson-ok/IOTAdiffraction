@@ -338,7 +338,7 @@ func Flatten2D(m [][]complex128) ([]complex128, error) {
 // The path line is drawn in red from (x1,y1) to (x2,y2).
 // A red dot is drawn at the start point and a green dot at the end point.
 func DrawPathOnImage(gray *image.Gray, x1, y1, x2, y2 float64,
-	startX, startY, endX, endY float64) *image.RGBA {
+	startX, startY, endX, endY float64, drawStartDot bool) *image.RGBA {
 	bounds := gray.Bounds()
 	result := image.NewRGBA(bounds)
 	draw.Draw(result, bounds, gray, bounds.Min, draw.Src)
@@ -360,11 +360,12 @@ func DrawPathOnImage(gray *image.Gray, x1, y1, x2, y2 float64,
 	// Draw the line in red
 	drawLineOnImage(result, x1, y1, x2, y2, lineHalfWidth, color.RGBA{R: 255, A: 255})
 
-	// Draw the start dot (red)
-	drawDotOnImage(result, startX, startY, dotRadius, color.RGBA{R: 255, A: 255})
-
-	// Draw the end dot (green)
-	drawDotOnImage(result, endX, endY, dotRadius, color.RGBA{G: 255, A: 255})
+	if drawStartDot {
+		// Draw the start dot (red)
+		drawDotOnImage(result, startX, startY, dotRadius, color.RGBA{R: 255, A: 255})
+		// Draw the end dot (green)
+		drawDotOnImage(result, endX, endY, dotRadius, color.RGBA{G: 255, A: 255})
+	}
 
 	return result
 }
@@ -466,6 +467,70 @@ func drawDotOnImage(img *image.RGBA, cx, cy float64, radius int, col color.Color
 					img.Set(px, py, col)
 				}
 			}
+		}
+	}
+}
+
+// drawPsfOnImage overlays a PSF matrix onto an RGBA image centered at (cx, cy)
+// using the given color. Brightness of each PSF pixel is normalized by maxVal
+// and used as the alpha blend factor.
+func drawPsfOnImage(img *image.RGBA, cx, cy float64, psf [][]float64, col color.RGBA) {
+	psfRows := len(psf)
+	if psfRows == 0 {
+		return
+	}
+	psfCols := len(psf[0])
+
+	// Find the max value in the PSF for normalization
+	maxVal := 0.0
+	for _, row := range psf {
+		for _, v := range row {
+			if v > maxVal {
+				maxVal = v
+			}
+		}
+	}
+	if maxVal <= 0 {
+		return
+	}
+
+	bounds := img.Bounds()
+	centerRow := float64(psfRows) / 2.0
+	centerCol := float64(psfCols) / 2.0
+
+	// Offset the draw position so the entire PSF stays within the image
+	if cx-centerCol < float64(bounds.Min.X) {
+		cx = float64(bounds.Min.X) + centerCol
+	}
+	if cy-centerRow < float64(bounds.Min.Y) {
+		cy = float64(bounds.Min.Y) + centerRow
+	}
+	if cx+centerCol > float64(bounds.Max.X) {
+		cx = float64(bounds.Max.X) - centerCol
+	}
+	if cy+centerRow > float64(bounds.Max.Y) {
+		cy = float64(bounds.Max.Y) - centerRow
+	}
+
+	for row := 0; row < psfRows; row++ {
+		for c := 0; c < psfCols; c++ {
+			if psf[row][c] <= 0 {
+				continue
+			}
+			px := int(cx + float64(c) - centerCol)
+			py := int(cy + float64(row) - centerRow)
+			if px < bounds.Min.X || px >= bounds.Max.X || py < bounds.Min.Y || py >= bounds.Max.Y {
+				continue
+			}
+			alpha := psf[row][c] / maxVal
+			bg := img.RGBAAt(px, py)
+			blended := color.RGBA{
+				R: uint8(float64(bg.R)*(1-alpha) + float64(col.R)*alpha),
+				G: uint8(float64(bg.G)*(1-alpha) + float64(col.G)*alpha),
+				B: uint8(float64(bg.B)*(1-alpha) + float64(col.B)*alpha),
+				A: 255,
+			}
+			img.SetRGBA(px, py, blended)
 		}
 	}
 }
