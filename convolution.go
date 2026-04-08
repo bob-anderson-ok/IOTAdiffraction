@@ -80,28 +80,65 @@ func BuildDoubleStarPsf(star1DiamKm, star2DiamKm, separationKm, angleDegreesCCW,
 	psfHalf := int(maxExtent) + 3 // border
 	psfWidth := psfHalf*2 + 1
 
+	// When stars are small relative to pixel size, sample a grid of sub-pixel
+	// points within each pixel to avoid missing a star whose disk falls entirely
+	// between pixel centers (e.g. at 45-degree angles on the diagonal).
+	minRadPixels := math.Min(star1RadiusPixels, star2RadiusPixels)
+	subN := 1
+	if minRadPixels < 1.5 {
+		subN = int(math.Ceil(1.0 / minRadPixels))
+		if subN < 2 {
+			subN = 2
+		}
+		if subN > 8 {
+			subN = 8
+		}
+	}
+	subInv := 1.0 / float64(subN)
+	subWeight := subInv * subInv
+
 	center := float64(psfHalf)
 	sumOfWeights := 0.0
 	starMatrix := make([][]float64, psfWidth)
 	for row := 0; row < psfWidth; row++ {
 		starMatrix[row] = make([]float64, psfWidth)
 		for col := 0; col < psfWidth; col++ {
-			fr := float64(row) - center
-			fc := float64(col) - center
+			var val float64
+			for sy := 0; sy < subN; sy++ {
+				for sx := 0; sx < subN; sx++ {
+					fr := float64(row) - center + (float64(sy)+0.5)*subInv - 0.5
+					fc := float64(col) - center + (float64(sx)+0.5)*subInv - 0.5
 
-			// Distance from this pixel to star 1 center
-			r1 := math.Sqrt((fr-dRow)*(fr-dRow)+(fc-dCol)*(fc-dCol)) * resolutionKmPerPixel
-			b1 := StarBrightness(r1, star1DiamKm, limbDarkeningCoeff1)
+					r1 := math.Sqrt((fr-dRow)*(fr-dRow)+(fc-dCol)*(fc-dCol)) * resolutionKmPerPixel
+					b1 := StarBrightness(r1, star1DiamKm, limbDarkeningCoeff1)
 
-			// Distance from this pixel to star 2 center
-			r2 := math.Sqrt((fr+dRow)*(fr+dRow)+(fc+dCol)*(fc+dCol)) * resolutionKmPerPixel
-			b2 := StarBrightness(r2, star2DiamKm, limbDarkeningCoeff2) * star2BrightFrac
+					r2 := math.Sqrt((fr+dRow)*(fr+dRow)+(fc+dCol)*(fc+dCol)) * resolutionKmPerPixel
+					b2 := StarBrightness(r2, star2DiamKm, limbDarkeningCoeff2) * star2BrightFrac
 
-			val := b1 + b2
+					val += (b1 + b2) * subWeight
+				}
+			}
 			starMatrix[row][col] = val
 			sumOfWeights += val
 		}
 	}
+
+	// Safety net: if stars are still too small to register, use point sources
+	if sumOfWeights == 0 {
+		r1 := int(math.Round(center + dRow))
+		c1 := int(math.Round(center + dCol))
+		r2 := int(math.Round(center - dRow))
+		c2 := int(math.Round(center - dCol))
+		if r1 >= 0 && r1 < psfWidth && c1 >= 0 && c1 < psfWidth {
+			starMatrix[r1][c1] = 1.0
+			sumOfWeights += 1.0
+		}
+		if r2 >= 0 && r2 < psfWidth && c2 >= 0 && c2 < psfWidth {
+			starMatrix[r2][c2] = star2BrightFrac
+			sumOfWeights += star2BrightFrac
+		}
+	}
+
 	return starMatrix, sumOfWeights
 }
 
