@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -8,6 +9,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -17,10 +19,7 @@ import (
 	json "github.com/KevinWang15/go-json5"
 )
 
-// !!!!! This MUST match the app name given in the run configuration !!!!!
-const version = "1.2.0"
-
-// !!!!! This MUST match the app name given in the run configuration !!!!!
+const version = "1.2.1"
 
 type OccultationEvent struct {
 	FplaneImage                     *image.Gray // A square array of uint8 values
@@ -117,7 +116,16 @@ func main() {
 	var jsonTable map[string]interface{}
 	err = json.Unmarshal(data, &jsonTable)
 	if err != nil {
-		exitWithError(fmt.Sprintf("\n\tFormat error in file %q: %v\n", path, err), 3)
+		errMsg := fmt.Sprintf("\n\tFormat error in file %q: %v", path, err)
+		var synErr *json.SyntaxError
+		if errors.As(err, &synErr) {
+			lines := strings.Split(string(data), "\n")
+			if synErr.Line >= 1 && synErr.Line <= len(lines) {
+				errMsg += fmt.Sprintf("\n\tLine %d: %s", synErr.Line, lines[synErr.Line-1])
+				errMsg += "\n\tNote: if the error is a missing comma, the problem is in an earlier line."
+			}
+		}
+		exitWithError(errMsg, 3)
 	}
 
 	var event OccultationEvent
