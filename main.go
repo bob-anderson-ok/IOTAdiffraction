@@ -19,7 +19,7 @@ import (
 	json "github.com/KevinWang15/go-json5"
 )
 
-const version = "1.2.2"
+const version = "1.2.3"
 
 type OccultationEvent struct {
 	FplaneImage                     *image.Gray // A square array of uint8 values

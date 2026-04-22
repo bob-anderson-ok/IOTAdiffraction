@@ -1,7 +1,7 @@
 {
   // Set window_size to 0 to suppress display of ground shadow (and possibly other plots as well)
 
-  window_size_pixels : 800,   // Optional but if omitted, a default size will be used so plots will be produced.
+  window_size_pixels : 600,   // Optional but if omitted, a default size will be used so plots will be produced.
 
   // The title of the ground shadow display image.
   // title : "(9203) Myrtus 2025 Feb 22",        // Optional
@@ -52,10 +52,10 @@
   percent_mag_drop : 100,  // Optional. If omitted, 100 will be used
 
   star_diam_on_plane_mas: 0.2,  // Optional. If omitted, 0.0 is used (i.e., no finite star calculation)
-  star2_diam_on_plane_mas: 0.2,
+  star2_diam_on_plane_mas: 0.4,
   star_separation_mas: 4.0,
   star_angle_degrees_ccw: 45,
-  star2_brightness_fraction: 0.25,
+  // star2_brightness_fraction: 0.25,
 
   // The following parameters control limb-darkening for the star.
   // Either the star class or a limb-darkening coefficient can be specified.

@@ -97,45 +97,77 @@ func BuildDoubleStarPsf(star1DiamKm, star2DiamKm, separationKm, angleDegreesCCW,
 	subInv := 1.0 / float64(subN)
 	subWeight := subInv * subInv
 
+	// Build the two stars as separate kernels so that we can remove the
+	// effect of differing disk areas before combining. Without this, a
+	// larger star would contribute more total flux to the convolution
+	// simply because its disk covers more pixels, overriding the intended
+	// star2BrightFrac weighting.
 	center := float64(psfHalf)
-	sumOfWeights := 0.0
-	starMatrix := make([][]float64, psfWidth)
+	star1Matrix := make([][]float64, psfWidth)
+	star2Matrix := make([][]float64, psfWidth)
+	sum1 := 0.0
+	sum2 := 0.0
 	for row := 0; row < psfWidth; row++ {
-		starMatrix[row] = make([]float64, psfWidth)
+		star1Matrix[row] = make([]float64, psfWidth)
+		star2Matrix[row] = make([]float64, psfWidth)
 		for col := 0; col < psfWidth; col++ {
-			var val float64
+			var v1, v2 float64
 			for sy := 0; sy < subN; sy++ {
 				for sx := 0; sx < subN; sx++ {
 					fr := float64(row) - center + (float64(sy)+0.5)*subInv - 0.5
 					fc := float64(col) - center + (float64(sx)+0.5)*subInv - 0.5
 
 					r1 := math.Sqrt((fr-dRow)*(fr-dRow)+(fc-dCol)*(fc-dCol)) * resolutionKmPerPixel
-					b1 := StarBrightness(r1, star1DiamKm, limbDarkeningCoeff1)
+					v1 += StarBrightness(r1, star1DiamKm, limbDarkeningCoeff1) * subWeight
 
 					r2 := math.Sqrt((fr+dRow)*(fr+dRow)+(fc+dCol)*(fc+dCol)) * resolutionKmPerPixel
-					b2 := StarBrightness(r2, star2DiamKm, limbDarkeningCoeff2) * star2BrightFrac
-
-					val += (b1 + b2) * subWeight
+					v2 += StarBrightness(r2, star2DiamKm, limbDarkeningCoeff2) * subWeight
 				}
 			}
-			starMatrix[row][col] = val
-			sumOfWeights += val
+			star1Matrix[row][col] = v1
+			star2Matrix[row][col] = v2
+			sum1 += v1
+			sum2 += v2
 		}
 	}
 
-	// Safety net: if stars are still too small to register, use point sources
-	if sumOfWeights == 0 {
+	// Safety net: if either star is still too small to register, place a
+	// point source at its rounded center so it contributes to the kernel.
+	if sum1 == 0 {
 		r1 := int(math.Round(center + dRow))
 		c1 := int(math.Round(center + dCol))
+		if r1 >= 0 && r1 < psfWidth && c1 >= 0 && c1 < psfWidth {
+			star1Matrix[r1][c1] = 1.0
+			sum1 = 1.0
+		}
+	}
+	if sum2 == 0 {
 		r2 := int(math.Round(center - dRow))
 		c2 := int(math.Round(center - dCol))
-		if r1 >= 0 && r1 < psfWidth && c1 >= 0 && c1 < psfWidth {
-			starMatrix[r1][c1] = 1.0
-			sumOfWeights += 1.0
-		}
 		if r2 >= 0 && r2 < psfWidth && c2 >= 0 && c2 < psfWidth {
-			starMatrix[r2][c2] = star2BrightFrac
-			sumOfWeights += star2BrightFrac
+			star2Matrix[r2][c2] = 1.0
+			sum2 = 1.0
+		}
+	}
+
+	// Combine the two normalized stars into the final convolution kernel.
+	// Each star's contribution is divided by the number of lit pixels in its
+	// own image (i.e. its own sum), so each star's total flux in the kernel
+	// is 1 for star 1 and star2BrightFrac for star 2 regardless of diameter.
+	starMatrix := make([][]float64, psfWidth)
+	sumOfWeights := 0.0
+	for row := 0; row < psfWidth; row++ {
+		starMatrix[row] = make([]float64, psfWidth)
+		for col := 0; col < psfWidth; col++ {
+			var v float64
+			if sum1 > 0 {
+				v += star1Matrix[row][col] / sum1
+			}
+			if sum2 > 0 {
+				v += (star2Matrix[row][col] / sum2) * star2BrightFrac
+			}
+			starMatrix[row][col] = v
+			sumOfWeights += v
 		}
 	}
 
