@@ -200,8 +200,8 @@ func validateJsonFileAndFillEvent(jsonTable map[string]interface{}, event *Occul
 		}
 	}
 
-	starDiam, ok := getLeafValue(jsonTable, "star_diam_on_plane_mas")
-	if !ok {
+	starDiam, starDiamGiven := getLeafValue(jsonTable, "star_diam_on_plane_mas")
+	if !starDiamGiven {
 		event.StarDiamMas = 0.0 // Default value
 	} else {
 		event.StarDiamMas, ok = starDiam.(float64)
@@ -255,6 +255,21 @@ func validateJsonFileAndFillEvent(jsonTable map[string]interface{}, event *Occul
 			if event.Star2BrightnessFraction < 0.0 || event.Star2BrightnessFraction > 1.0 {
 				msg = "star2_brightness_fraction: must be between 0.0 and 1.0"
 				return msg, false
+			}
+		}
+
+		// Both star diameters are specified. A diameter of exactly 0.0 would
+		// cause the rest of the pipeline (which keys on Star2DiamKm > 0 to
+		// recognize a double-star event) to drop back to single-star handling,
+		// and would also produce a zero-area disk in PSF construction. Replace
+		// any explicit 0.0 with a negligible-but-nonzero value instead.
+		if starDiamGiven {
+			const epsilon = 0.000001
+			if event.StarDiamMas == 0.0 {
+				event.StarDiamMas = epsilon
+			}
+			if event.Star2DiamMas == 0.0 {
+				event.Star2DiamMas = epsilon
 			}
 		}
 	}

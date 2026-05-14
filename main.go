@@ -19,7 +19,7 @@ import (
 	json "github.com/KevinWang15/go-json5"
 )
 
-const version = "1.2.3"
+const version = "1.2.4"
 
 type OccultationEvent struct {
 	FplaneImage                     *image.Gray // A square array of uint8 values
@@ -352,6 +352,16 @@ func main() {
 	event.StarDiamKm = masToKm * event.StarDiamMas
 	event.Star2DiamKm = masToKm * event.Star2DiamMas
 	event.StarSeparationKm = masToKm * event.StarSeparationMas
+
+	// For a double star, the observed geometric shadow is the union of the
+	// silhouette as seen by each component. Replace event.GeometricMatrix with
+	// that composite so that edge finding reports immersion/emersion times for
+	// both stars rather than the single-star silhouette.
+	if event.Star2DiamKm > 0.0 && event.StarSeparationKm > 0.0 {
+		event.GeometricMatrix = BuildCompositeGeometricMatrix(
+			event.GeometricMatrix, event.StarSeparationKm,
+			event.StarAngleDegreesCCW, resolution)
+	}
 
 	var eField []complex128
 	if len(event.QEtable) > 0 {

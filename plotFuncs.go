@@ -300,31 +300,27 @@ func makeStarProfileImage(wPx, hPx float64, e OccultationEvent) (image.Image, er
 		margin := maxExtent * 0.2
 		xMin := -(maxExtent + margin)
 		xMax := maxExtent + margin
-		step := (xMax - xMin) / float64(numPoints-1)
 
-		pts1 := make(plotter.XYs, numPoints)
-		pts2 := make(plotter.XYs, numPoints)
-		for i := 0; i < numPoints; i++ {
-			x := xMin + float64(i)*step
-			pts1[i].X = x
-			pts1[i].Y = StarBrightness(math.Abs(x-(-halfSepKm)), e.StarDiamKm, e.LimbDarkeningCoeff)
-			pts2[i].X = x
-			pts2[i].Y = StarBrightness(math.Abs(x-halfSepKm), e.Star2DiamKm, e.LimbDarkeningCoeff2) * e.Star2BrightnessFraction
-		}
+		// If a star is narrower than minPxToShow pixels at the plot's x-scale,
+		// its limb-darkening curve would collapse to invisibility — draw a
+		// vertical line at the star's center instead.
+		const minPxToShow = 2.0
+		pxPerKm := wPx / (xMax - xMin)
 
-		line1, err := plotter.NewLine(pts1)
+		orange := color.RGBA{R: 255, G: 165, B: 0, A: 255}
+		blue := color.RGBA{R: 0, G: 0, B: 255, A: 255}
+
+		line1, err := starProfileLine(-halfSepKm, e.StarDiamKm, e.LimbDarkeningCoeff,
+			1.0, xMin, xMax, numPoints, pxPerKm, minPxToShow, orange)
 		if err != nil {
 			return nil, fmt.Errorf("star1 profile line: %w", err)
 		}
-		line1.Color = color.RGBA{R: 255, G: 165, B: 0, A: 255} // orange
-		line1.Width = vg.Points(2)
 
-		line2, err := plotter.NewLine(pts2)
+		line2, err := starProfileLine(halfSepKm, e.Star2DiamKm, e.LimbDarkeningCoeff2,
+			e.Star2BrightnessFraction, xMin, xMax, numPoints, pxPerKm, minPxToShow, blue)
 		if err != nil {
 			return nil, fmt.Errorf("star2 profile line: %w", err)
 		}
-		line2.Color = color.RGBA{R: 0, G: 0, B: 255, A: 255} // blue
-		line2.Width = vg.Points(2)
 
 		p.Add(line1, line2)
 		p.Legend.Add(fmt.Sprintf("Star 1 (%.3f km)", e.StarDiamKm), line1)
@@ -366,4 +362,34 @@ func makeStarProfileImage(wPx, hPx float64, e OccultationEvent) (image.Image, er
 	dc := draw.New(c)
 	p.Draw(dc)
 	return c.Image(), nil
+}
+
+// starProfileLine returns a plotter.Line representing one star's intensity
+// profile. If the star is wide enough at the current x-scale to render a
+// visible limb-darkening curve, that curve is built. Otherwise a vertical line
+// from y=0 to the peak brightness is drawn at the star's center, so the star's
+// position is still indicated on the plot.
+func starProfileLine(centerKm, starDiamKm, limbCoeff, peakY, xMin, xMax float64,
+	numPoints int, pxPerKm, minPxToShow float64, clr color.RGBA) (*plotter.Line, error) {
+
+	var pts plotter.XYs
+	if starDiamKm*pxPerKm >= minPxToShow {
+		step := (xMax - xMin) / float64(numPoints-1)
+		pts = make(plotter.XYs, numPoints)
+		for i := range numPoints {
+			x := xMin + float64(i)*step
+			pts[i].X = x
+			pts[i].Y = StarBrightness(math.Abs(x-centerKm), starDiamKm, limbCoeff) * peakY
+		}
+	} else {
+		pts = plotter.XYs{{X: centerKm, Y: 0.0}, {X: centerKm, Y: peakY}}
+	}
+
+	line, err := plotter.NewLine(pts)
+	if err != nil {
+		return nil, err
+	}
+	line.Color = clr
+	line.Width = vg.Points(2)
+	return line, nil
 }

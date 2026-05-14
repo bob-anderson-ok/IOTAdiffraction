@@ -74,6 +74,44 @@ func processPathDirection(Npts int, p1 AnnotatedPoint, p2 AnnotatedPoint,
 	return p1, p2, direction, err
 }
 
+// BuildCompositeGeometricMatrix returns a binary geometric shadow that combines
+// the silhouette as seen by each component of a double star. The two stars are
+// offset symmetrically about the path center by halfSepPixels at angleDegreesCCW
+// (CCW from vertical), matching the convention in BuildDoubleStarPsf. The
+// composite is the union of two shifted copies of the original silhouette, so
+// its edges along the observation path correspond to the immersion/emersion
+// times of either star.
+func BuildCompositeGeometricMatrix(matrix [][]float64, separationKm, angleDegreesCCW, resolutionKmPerPixel float64) [][]float64 {
+	rows := len(matrix)
+	if rows == 0 {
+		return matrix
+	}
+	cols := len(matrix[0])
+
+	halfSepPixels := separationKm / (2.0 * resolutionKmPerPixel)
+	angleRad := angleDegreesCCW * math.Pi / 180.0
+
+	dCol := int(math.Round(-halfSepPixels * math.Sin(angleRad)))
+	dRow := int(math.Round(-halfSepPixels * math.Cos(angleRad)))
+
+	composite := make([][]float64, rows)
+	for r := range rows {
+		composite[r] = make([]float64, cols)
+		for c := range cols {
+			r1, c1 := r-dRow, c-dCol
+			r2, c2 := r+dRow, c+dCol
+			if r1 >= 0 && r1 < rows && c1 >= 0 && c1 < cols && matrix[r1][c1] > 0.0 {
+				composite[r][c] = 1.0
+				continue
+			}
+			if r2 >= 0 && r2 < rows && c2 >= 0 && c2 < cols && matrix[r2][c2] > 0.0 {
+				composite[r][c] = 1.0
+			}
+		}
+	}
+	return composite
+}
+
 func FindEdgesInGeometricShadow(e OccultationEvent) []float64 {
 	var ans []float64
 	var colorAtNextEdge = 1.0
